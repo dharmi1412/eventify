@@ -4,7 +4,8 @@ import { connectDb } from "./config/db.js";
 import User from "./models/User.js";
 import Event from "./models/Event.js";
 import cors from "cors";
-
+import dotenv from "dotenv";
+dotenv.config();
 async function ensureAdminUser() {
   const email = process.env.ADMIN_EMAIL || "admin@eventify.in";
   const password = process.env.ADMIN_PASSWORD || "admin123";
