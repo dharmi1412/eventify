@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://eventify-6gzq.onrender.com/api/:path*"
+    }
+  ]
+}

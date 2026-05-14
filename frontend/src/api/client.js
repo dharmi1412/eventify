@@ -1,10 +1,11 @@
 /**
- * Optional emergency override without rebuilding (set before the app module loads):
+ * Optional override (must run before this module loads):
  * <script>window.__EVENTIFY_API_URL__="https://your-api.com/api"</script>
  *
- * Express mounts all routes under `/api`. Host-only URLs like
- * `https://service.onrender.com` are normalized to `.../api` so requests
- * hit `/api/events`, `/api/auth/login`, etc.
+ * Express mounts routes under `/api`. Host-only URLs get `/api` appended.
+ *
+ * Production without VITE_API_URL: uses same-origin `/api` (or /{BASE_URL}api).
+ * Deploy with `frontend/vercel.json` or `public/_redirects` so `/api` proxies to Render.
  */
 function normalizeApiBase(raw) {
   const s = String(raw || "").trim().replace(/\/+$/, "");
@@ -24,16 +25,40 @@ function normalizeApiBase(raw) {
   return `${s}/api`;
 }
 
-function resolveApiBase() {
+/** If the page is HTTPS, never call a non-localhost http:// API (mixed content → Failed to fetch). */
+function upgradeToHttpsIfNeeded(base) {
+  if (typeof window === "undefined") return base;
+  if (window.location.protocol !== "https:") return base;
+  if (base.startsWith("http://") && !/localhost|127\.0\.0\.1/i.test(base)) {
+    return `https://${base.slice(7)}`;
+  }
+  return base;
+}
+
+/** Same-origin API path for static hosts with a reverse proxy to the real backend. */
+function productionSameOriginApi() {
+  const origin = window.location.origin;
+  const prefix = (import.meta.env.BASE_URL || "/").replace(/\/+$/, "");
+  const suffix = prefix ? `${prefix}/api` : "/api";
+  return `${origin}${suffix}`;
+}
+
+export function getApiBase() {
   const fromWindow =
     typeof window !== "undefined" && window.__EVENTIFY_API_URL__
       ? String(window.__EVENTIFY_API_URL__).trim()
       : "";
-  const fromEnv = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-  return normalizeApiBase(fromWindow || fromEnv);
-}
+  const fromEnv = (import.meta.env.VITE_API_URL || "").trim();
+  const explicit = fromWindow || fromEnv;
 
-export const API_BASE = resolveApiBase();
+  if (explicit) {
+    return upgradeToHttpsIfNeeded(normalizeApiBase(explicit));
+  }
+  if (typeof window !== "undefined") {
+    return productionSameOriginApi().replace(/\/+$/, "");
+  }
+  return "http://localhost:5000/api";
+}
 
 export function getToken() {
   return sessionStorage.getItem("evtfy_token");
@@ -49,7 +74,8 @@ export function setToken(token) {
  * @param {{ method?: string, body?: unknown, skipAuth?: boolean }} [opts]
  */
 export async function api(path, { method = "GET", body, skipAuth = false } = {}) {
-  const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const base = getApiBase();
+  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const headers = { "Content-Type": "application/json" };
   if (!skipAuth) {
     const t = getToken();
@@ -59,12 +85,14 @@ export async function api(path, { method = "GET", body, skipAuth = false } = {})
   try {
     res = await fetch(url, {
       method,
+      mode: "cors",
+      credentials: "omit",
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch (e) {
     const err = new Error(
-      `Cannot reach API (${e?.message || "network"}). Requests use: ${API_BASE}`
+      `Cannot reach API (${e?.message || "network"}). Requests use: ${base}`
     );
     err.cause = e;
     throw err;

@@ -5619,7 +5619,7 @@ import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
-import { api, getToken, setToken, normalizeEvent, normalizeBooking, API_BASE } from "./api/client.js";
+import { api, getToken, setToken, normalizeEvent, normalizeBooking, getApiBase } from "./api/client.js";
 
 // ─────────────────────────────────────────────────────────────
 // 1. GLOBAL STYLES
@@ -6430,7 +6430,7 @@ function EventProvider({ children }) {
         organizerEvents,
         eventsLoading,
         eventsError,
-        apiBase: API_BASE,
+        apiBase: getApiBase(),
         organizerLoading,
         refreshEvents,
         refreshOrganizerEvents,
@@ -6841,11 +6841,16 @@ function EventsPage({ setPage, setSelectedEvent }) {
           <p style={{ fontSize: 14, color: "var(--text2)", lineHeight: 1.5, marginBottom: 12 }}>{eventsError}</p>
           <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12, wordBreak: "break-all" }}>
             API base in this build: <strong style={{ color: "var(--text2)" }}>{apiBase}</strong>
-            {apiBase.includes("localhost") && (
+            {apiBase.includes("localhost:5000") && (
               <span>
                 {" "}
-                — production still points at localhost unless you set <code style={{ fontSize: 11 }}>VITE_API_URL</code> and redeploy, or set{" "}
-                <code style={{ fontSize: 11 }}>window.__EVENTIFY_API_URL__</code> in <code style={{ fontSize: 11 }}>index.html</code> before the app script.
+                — this points at your machine, not the internet. Remove a wrong <code style={{ fontSize: 11 }}>VITE_API_URL</code> from the host so the app uses same-origin <code style={{ fontSize: 11 }}>/api</code> (with <code style={{ fontSize: 11 }}>vercel.json</code> / Netlify <code style={{ fontSize: 11 }}>_redirects</code>), or set <code style={{ fontSize: 11 }}>VITE_API_URL</code> to your live HTTPS API including <code style={{ fontSize: 11 }}>/api</code>.
+              </span>
+            )}
+            {!apiBase.includes("localhost:5000") && typeof window !== "undefined" && apiBase.startsWith(window.location.origin) && (
+              <span>
+                {" "}
+                — same-origin <code style={{ fontSize: 11 }}>/api</code> is used. Your host must proxy <code style={{ fontSize: 11 }}>/api/*</code> to the Render API (see <code style={{ fontSize: 11 }}>frontend/vercel.json</code> and <code style={{ fontSize: 11 }}>public/_redirects</code> in the repo). Update the Render URL there if yours changed.
               </span>
             )}
           </p>
