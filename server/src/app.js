@@ -9,15 +9,6 @@ import errorHandler from "./middleware/errorHandler.js";
 
 const app = express();
 
-/** Comma-separated list, e.g. https://app.vercel.app,https://preview.vercel.app */
-function parseAllowedOrigins() {
-  const raw = process.env.CLIENT_ORIGIN || process.env.CLIENT_ORIGINS || "";
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -25,16 +16,19 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use(helmet());
-const allowedOrigins = parseAllowedOrigins();
+// CORP "same-origin" (Helmet default) blocks cross-origin SPAs from reading JSON
+// even when CORS allows the request — use "cross-origin" for a public API + separate frontend.
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
+
+// Reflect request Origin so any deployed frontend (Vercel/Netlify previews, etc.) works
+// without maintaining CLIENT_ORIGIN. Auth uses Bearer JWT, not cookies.
 app.use(
   cors({
-    origin(origin, callback) {
-      if (!origin) return callback(null, true);
-      if (!allowedOrigins.length) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      callback(null, false);
-    },
+    origin: true,
     credentials: true,
   })
 );
