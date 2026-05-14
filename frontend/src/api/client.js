@@ -1,14 +1,36 @@
 /**
  * Optional emergency override without rebuilding (set before the app module loads):
  * <script>window.__EVENTIFY_API_URL__="https://your-api.com/api"</script>
+ *
+ * Express mounts all routes under `/api`. Host-only URLs like
+ * `https://service.onrender.com` are normalized to `.../api` so requests
+ * hit `/api/events`, `/api/auth/login`, etc.
  */
+function normalizeApiBase(raw) {
+  const s = String(raw || "").trim().replace(/\/+$/, "");
+  if (!s) return "http://localhost:5000/api";
+  if (/\/api$/i.test(s)) return s;
+  try {
+    const href = /^https?:\/\//i.test(s) ? s : `https://${s}`;
+    const u = new URL(href);
+    const path = (u.pathname || "/").replace(/\/+$/, "") || "/";
+    if (path === "/") {
+      u.pathname = "/api";
+      return u.toString().replace(/\/+$/, "");
+    }
+  } catch {
+    /* ignore */
+  }
+  return `${s}/api`;
+}
+
 function resolveApiBase() {
   const fromWindow =
     typeof window !== "undefined" && window.__EVENTIFY_API_URL__
       ? String(window.__EVENTIFY_API_URL__).trim()
       : "";
   const fromEnv = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-  return (fromWindow || fromEnv).replace(/\/$/, "");
+  return normalizeApiBase(fromWindow || fromEnv);
 }
 
 export const API_BASE = resolveApiBase();
