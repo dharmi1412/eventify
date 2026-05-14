@@ -1,4 +1,17 @@
-const BASE = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/$/, "");
+/**
+ * Optional emergency override without rebuilding (set before the app module loads):
+ * <script>window.__EVENTIFY_API_URL__="https://your-api.com/api"</script>
+ */
+function resolveApiBase() {
+  const fromWindow =
+    typeof window !== "undefined" && window.__EVENTIFY_API_URL__
+      ? String(window.__EVENTIFY_API_URL__).trim()
+      : "";
+  const fromEnv = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  return (fromWindow || fromEnv).replace(/\/$/, "");
+}
+
+export const API_BASE = resolveApiBase();
 
 export function getToken() {
   return sessionStorage.getItem("evtfy_token");
@@ -14,17 +27,26 @@ export function setToken(token) {
  * @param {{ method?: string, body?: unknown, skipAuth?: boolean }} [opts]
  */
 export async function api(path, { method = "GET", body, skipAuth = false } = {}) {
-  const url = `${BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
   const headers = { "Content-Type": "application/json" };
   if (!skipAuth) {
     const t = getToken();
     if (t) headers.Authorization = `Bearer ${t}`;
   }
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    const err = new Error(
+      `Cannot reach API (${e?.message || "network"}). Requests use: ${API_BASE}`
+    );
+    err.cause = e;
+    throw err;
+  }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(json.message || `Request failed (${res.status})`);

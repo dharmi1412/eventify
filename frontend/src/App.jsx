@@ -5619,7 +5619,7 @@ import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
-import { api, getToken, setToken, normalizeEvent, normalizeBooking } from "./api/client.js";
+import { api, getToken, setToken, normalizeEvent, normalizeBooking, API_BASE } from "./api/client.js";
 
 // ─────────────────────────────────────────────────────────────
 // 1. GLOBAL STYLES
@@ -6355,15 +6355,18 @@ function EventProvider({ children }) {
   const [organizerEvents, setOrganizerEvents] = useState([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [organizerLoading, setOrganizerLoading] = useState(false);
+  const [eventsError, setEventsError] = useState(null);
 
   const refreshEvents = useCallback(async () => {
     setEventsLoading(true);
+    setEventsError(null);
     try {
       const res = await api("/events?limit=100&page=1", { skipAuth: true });
       const list = res.data?.events || [];
       setEvents(list.map(normalizeEvent));
-    } catch {
+    } catch (e) {
       setEvents([]);
+      setEventsError(e?.message || "Could not load events");
     } finally {
       setEventsLoading(false);
     }
@@ -6426,6 +6429,8 @@ function EventProvider({ children }) {
         events,
         organizerEvents,
         eventsLoading,
+        eventsError,
+        apiBase: API_BASE,
         organizerLoading,
         refreshEvents,
         refreshOrganizerEvents,
@@ -6774,16 +6779,17 @@ function HomePage({ setPage, setSelectedEvent, setModal }) {
 // 10. EVENTS PAGE (with Search, Filter, Pagination)
 // ─────────────────────────────────────────────────────────────
 function EventsPage({ setPage, setSelectedEvent }) {
-  const { events, eventsLoading } = useContext(EventCtx);
+  const { events, eventsLoading, eventsError, apiBase, refreshEvents } = useContext(EventCtx);
   const [cat, setCat] = useState("All");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("default");
 
   const filtered = useMemo(() => {
+    const q = search.toLowerCase();
     let res = events.filter(e =>
       (cat==="All" || e.category===cat) &&
-      (e.title.toLowerCase().includes(search.toLowerCase()) ||
-       e.location.toLowerCase().includes(search.toLowerCase()))
+      ((e.title || "").toLowerCase().includes(q) ||
+       (e.location || "").toLowerCase().includes(q))
     );
     if (sort==="price-asc")  res = [...res].sort((a,b) => a.price-b.price);
     if (sort==="price-desc") res = [...res].sort((a,b) => b.price-a.price);
@@ -6821,6 +6827,34 @@ function EventsPage({ setPage, setSelectedEvent }) {
         ))}
       </div>
 
+      {eventsError && (
+        <div
+          className="card glass-card"
+          style={{
+            marginBottom: 20,
+            padding: "16px 20px",
+            borderColor: "rgba(232, 93, 93, 0.35)",
+            background: "rgba(232, 93, 93, 0.08)",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: 8, color: "var(--text)" }}>Events could not be loaded</div>
+          <p style={{ fontSize: 14, color: "var(--text2)", lineHeight: 1.5, marginBottom: 12 }}>{eventsError}</p>
+          <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12, wordBreak: "break-all" }}>
+            API base in this build: <strong style={{ color: "var(--text2)" }}>{apiBase}</strong>
+            {apiBase.includes("localhost") && (
+              <span>
+                {" "}
+                — production still points at localhost unless you set <code style={{ fontSize: 11 }}>VITE_API_URL</code> and redeploy, or set{" "}
+                <code style={{ fontSize: 11 }}>window.__EVENTIFY_API_URL__</code> in <code style={{ fontSize: 11 }}>index.html</code> before the app script.
+              </span>
+            )}
+          </p>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => refreshEvents()}>
+            Retry
+          </button>
+        </div>
+      )}
+
       <div style={{ color:"var(--muted)", fontSize:13, marginBottom:16 }}>
         Showing {slice.length} of {filtered.length} events
       </div>
@@ -6830,8 +6864,22 @@ function EventsPage({ setPage, setSelectedEvent }) {
       ) : filtered.length===0 ? (
         <div style={{ textAlign:"center", padding:"60px 0", color:"var(--muted)" }}>
           <div style={{ fontSize:48, marginBottom:16 }}>🔍</div>
-          <p>No events found. Try a different search.</p>
-          <button className="btn btn-ghost mt-16" onClick={() => { setCat("All"); setSearch(""); }}>Clear Filters</button>
+          {eventsError ? (
+            <p>Fix the connection issue above, then retry.</p>
+          ) : events.length === 0 ? (
+            <>
+              <p>No events are available from the server yet.</p>
+              <p style={{ fontSize: 13, marginTop: 12, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
+                If this is a new deployment, your production database may be empty. Seed events locally and export to Atlas, or set{" "}
+                <code style={{ fontSize: 12 }}>SEED_ON_START=true</code> once on the API host (then turn it off).
+              </p>
+            </>
+          ) : (
+            <>
+              <p>No events match your filters. Try a different search.</p>
+              <button className="btn btn-ghost mt-16" onClick={() => { setCat("All"); setSearch(""); }}>Clear Filters</button>
+            </>
+          )}
         </div>
       ) : (
         <>
