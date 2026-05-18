@@ -20,8 +20,8 @@ export const listEvents = catchAsync(async (req, res) => {
   if (sort === "price-desc") sortSpec = { price: -1 };
   if (sort === "fill") sortSpec = { booked: -1 };
 
-  const skip = (Math.max(1, +page) - 1) * Math.min(50, Math.max(1, +limit));
-  const take = Math.min(50, Math.max(1, +limit));
+  const skip = (Math.max(1, +page) - 1) * Math.min(100, Math.max(1, +limit));
+  const take = Math.min(100, Math.max(1, +limit));
   const [items, total] = await Promise.all([
     Event.find(q).sort(sortSpec).skip(skip).limit(take).populate("organizer", "name email"),
     Event.countDocuments(q),

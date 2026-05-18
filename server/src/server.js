@@ -83,6 +83,7 @@ async function ensureAdminUser() {
     email,
     password,
     role: "admin",
+    userName: "admin",
   });
 
   console.log(`Seeded admin user: ${email}`);

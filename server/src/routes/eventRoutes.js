@@ -15,7 +15,7 @@ router.get(
     query("search").optional().isString(),
     query("sort").optional().isIn(["default", "price-asc", "price-desc", "fill"]),
     query("page").optional().isInt({ min: 1 }),
-    query("limit").optional().isInt({ min: 1, max: 50 }),
+    query("limit").optional().isInt({ min: 1, max: 100 }),
   ],
   validateRequest,
   events.listEvents

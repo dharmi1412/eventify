@@ -15,6 +15,8 @@ const notificationSchema = new mongoose.Schema(
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
+    // Legacy field from an older schema; some Atlas DBs still have a unique index on userName.
+    userName: { type: String, trim: true, default: "" },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true, minlength: 6, select: false },
     role: {
@@ -41,10 +43,13 @@ userSchema.methods.comparePassword = function comparePassword(candidate) {
   return bcrypt.compare(candidate, this.password);
 };
 
-userSchema.pre("save", async function hashPassword() {
+userSchema.pre("save", function prepareUser() {
+  if (!this.userName && this.email) {
+    this.userName = String(this.email).toLowerCase();
+  }
   if (!this.isModified("password")) return;
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  const salt = bcrypt.genSaltSync(10);
+  this.password = bcrypt.hashSync(this.password, salt);
 });
 
 export default mongoose.model("User", userSchema);

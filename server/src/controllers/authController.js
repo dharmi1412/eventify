@@ -27,7 +27,24 @@ export const register = catchAsync(async (req, res) => {
   }
   const exists = await User.findOne({ email });
   if (exists) throw new ApiError(409, "Email already registered");
-  const user = await User.create({ name, email, password, role });
+  let user;
+  try {
+    user = await User.create({
+      name,
+      email,
+      password,
+      role,
+      userName: String(email).toLowerCase(),
+    });
+  } catch (err) {
+    if (err?.code === 11000) {
+      throw new ApiError(409, "Email already registered");
+    }
+    if (err?.name === "ValidationError") {
+      throw new ApiError(422, err.message);
+    }
+    throw err;
+  }
   res.status(201).json({ success: true, data: authResponse(user) });
 });
 
