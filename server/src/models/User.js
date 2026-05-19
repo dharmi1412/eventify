@@ -33,6 +33,7 @@ const userSchema = new mongoose.Schema(
     city: { type: String, default: "" },
     bio: { type: String, default: "" },
     avatarUrl: { type: String, default: "" },
+    bannerUrl: { type: String, default: "" },
     dateOfBirth: { type: Date },
     notificationPrefs: { type: notificationSchema, default: () => ({}) },
   },
