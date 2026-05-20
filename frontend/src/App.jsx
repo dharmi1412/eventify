@@ -954,6 +954,7 @@ function useForm(defaults = {}) {
   const [touched, setTouched] = useState({});
 
   const register = (name, rules = {}) => ({
+    name,
     value: values[name] ?? "",
     onChange: (e) => {
       const v = e.target.value;
@@ -1502,19 +1503,16 @@ function loadRazorpay(amount, name, onSuccess) {
   );
 }
 
-// Cloudinary upload stub
+// Cloudinary upload stub (development only)
+// Returns a persistent placeholder URL instead of a blob URL so images survive reloads.
 async function uploadToCloudinary(file) {
   // In production: POST to https://api.cloudinary.com/v1_1/{cloud}/image/upload
-  return new Promise((resolve) =>
-    setTimeout(
-      () =>
-        resolve({
-          url: URL.createObjectURL(file),
-          public_id: "evt_" + Date.now(),
-        }),
-      1200,
-    ),
-  );
+  return new Promise((resolve) => {
+    const id = "evt_" + Date.now();
+    // Use placehold.co so the returned URL is reachable after page reloads.
+    const url = `https://placehold.co/800x400?text=${encodeURIComponent(id)}`;
+    setTimeout(() => resolve({ url, public_id: id }), 800);
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1524,6 +1522,7 @@ function Navbar({ page, setPage, setModal }) {
   const { user, logout, isAuth } = useContext(AuthCtx);
   const { dark, toggle } = useContext(ThemeCtx);
   const links = [
+    { label: "Home", page: "home" },
     { label: "Events", page: "events" },
     { label: "How It Works", page: "how" },
     { label: "About", page: "about" },
@@ -1578,7 +1577,20 @@ function Navbar({ page, setPage, setModal }) {
               onClick={() => setPage("account")}
               title="My Account"
             >
-              {user.name[0]}
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                  }}
+                />
+              ) : (
+                user.name[0]
+              )}
             </div>
             <button
               className="btn btn-ghost btn-sm"
@@ -3139,17 +3151,31 @@ function UserDashboard({ setPage, setModal }) {
                   padding: 26,
                 }}
               >
-                <div
-                  className="avatar"
-                  style={{
-                    width: 66,
-                    height: 66,
-                    fontSize: 26,
-                    border: "3px solid var(--accent)",
-                  }}
-                >
-                  {user.name[0]}
-                </div>
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name}
+                    style={{
+                      width: 66,
+                      height: 66,
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      border: "3px solid var(--accent)",
+                    }}
+                  />
+                ) : (
+                  <div
+                    className="avatar"
+                    style={{
+                      width: 66,
+                      height: 66,
+                      fontSize: 26,
+                      border: "3px solid var(--accent)",
+                    }}
+                  >
+                    {user.name[0]}
+                  </div>
+                )}
                 <div style={{ flex: 1 }}>
                   <h2
                     style={{
@@ -3163,6 +3189,22 @@ function UserDashboard({ setPage, setModal }) {
                   <div style={{ color: "var(--text2)", fontSize: 14 }}>
                     {user.email}
                   </div>
+                  {user.phone ? (
+                    <div style={{ color: "var(--text2)", fontSize: 14 }}>
+                      📞 {user.phone}
+                    </div>
+                  ) : null}
+                  {user.bio ? (
+                    <div
+                      style={{
+                        color: "var(--text2)",
+                        fontSize: 14,
+                        marginTop: 6,
+                      }}
+                    >
+                      {user.bio}
+                    </div>
+                  ) : null}
                   <div
                     style={{
                       marginTop: 8,
@@ -3613,7 +3655,7 @@ function UserDashboard({ setPage, setModal }) {
 function ProfileTab({ user }) {
   const toast = useContext(ToastCtx);
   const { refreshUser, setUser } = useContext(AuthCtx);
-  const { values, errors, register, validateAll, setValue } = useForm({
+  const [form, setForm] = useState({
     fname: user?.name?.split(" ")[0] || "",
     lname: user?.name?.split(" ").slice(1).join(" ") || "",
     email: user?.email || "",
@@ -3621,20 +3663,29 @@ function ProfileTab({ user }) {
     city: user?.city || "Mumbai",
     bio: user?.bio || "",
   });
+  const [errors, setErrors] = useState({});
   const [img, setImg] = useState(user?.avatarUrl || null);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     const parts = user.name?.split(" ") || [];
-    setValue("fname", parts[0] || "");
-    setValue("lname", parts.slice(1).join(" ") || "");
-    setValue("email", user.email || "");
-    setValue("phone", user.phone || "");
-    setValue("city", user.city || "Mumbai");
-    setValue("bio", user.bio || "");
+    setForm({
+      fname: parts[0] || "",
+      lname: parts.slice(1).join(" ") || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      city: user.city || "Mumbai",
+      bio: user.bio || "",
+    });
     setImg(user.avatarUrl || null);
-  }, [user, setValue]);
+  }, [user]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
+  };
 
   const handleImgUpload = async (e) => {
     const file = e.target.files[0];
@@ -3653,27 +3704,28 @@ function ProfileTab({ user }) {
     }
   };
 
+  const validateForm = () => {
+    const next = {};
+    if (!form.fname?.trim()) next.fname = "First name is required";
+    if (!form.email?.trim()) next.email = "Email is required";
+    else if (!/\S+@\S+\.\S+/.test(form.email))
+      next.email = "Valid email is required";
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
   const save = async () => {
-    if (
-      !validateAll({
-        fname: { required: true },
-        email: {
-          required: true,
-          pattern: { value: /\S+@\S+\.\S+/, message: "Valid email required" },
-        },
-      })
-    )
-      return;
-    const name = `${values.fname} ${values.lname || ""}`.trim();
+    if (!validateForm()) return;
+    const name = `${form.fname} ${form.lname || ""}`.trim();
     try {
       await api("/users/me", {
         method: "PATCH",
         body: {
           name,
-          email: values.email,
-          phone: values.phone,
-          city: values.city,
-          bio: values.bio,
+          email: form.email,
+          phone: form.phone,
+          city: form.city,
+          bio: form.bio,
         },
       });
       const u = await refreshUser();
@@ -3758,31 +3810,52 @@ function ProfileTab({ user }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <div className="form-group">
           <label className="form-label">First Name *</label>
-          <input {...register("fname", { required: true })} />
+          <input
+            name="fname"
+            value={form.fname}
+            onChange={handleChange}
+            className="form-input"
+          />
           {errors.fname && <div className="form-error">{errors.fname}</div>}
         </div>
         <div className="form-group">
           <label className="form-label">Last Name</label>
-          <input {...register("lname")} />
+          <input
+            name="lname"
+            value={form.lname}
+            onChange={handleChange}
+            className="form-input"
+          />
         </div>
       </div>
       <div className="form-group">
         <label className="form-label">Email *</label>
         <input
-          {...register("email", {
-            required: true,
-            pattern: { value: /\S+@\S+\.\S+/, message: "Valid email" },
-          })}
+          name="email"
+          value={form.email}
+          onChange={handleChange}
+          className="form-input"
         />
         {errors.email && <div className="form-error">{errors.email}</div>}
       </div>
       <div className="form-group">
         <label className="form-label">Phone</label>
-        <input {...register("phone")} placeholder="+91 XXXXX XXXXX" />
+        <input
+          name="phone"
+          value={form.phone}
+          onChange={handleChange}
+          className="form-input"
+          placeholder="+91 XXXXX XXXXX"
+        />
       </div>
       <div className="form-group">
         <label className="form-label">City</label>
-        <select {...register("city")} className="form-input">
+        <select
+          name="city"
+          value={form.city}
+          onChange={handleChange}
+          className="form-input"
+        >
           {["Mumbai", "Delhi", "Bengaluru", "Hyderabad", "Pune", "Chennai"].map(
             (c) => (
               <option key={c}>{c}</option>
@@ -3793,7 +3866,9 @@ function ProfileTab({ user }) {
       <div className="form-group">
         <label className="form-label">Bio</label>
         <textarea
-          {...register("bio")}
+          name="bio"
+          value={form.bio}
+          onChange={handleChange}
           className="form-input"
           style={{ resize: "vertical" }}
           placeholder="Tell us a bit about yourself..."
@@ -7463,22 +7538,7 @@ function AuthModal({ type, setModal, setPage }) {
           </div>
         )}
 
-        {mode === "login" && (
-          <div
-            style={{
-              fontSize: 12,
-              color: "var(--muted)",
-              marginBottom: 16,
-              padding: "10px 14px",
-              background: "var(--surface2)",
-              borderRadius: 8,
-            }}
-          >
-            💡 <strong>Demo:</strong> Use the admin account from your server{" "}
-            <code style={{ fontSize: 11 }}>.env</code> (default
-            admin@eventify.in / admin123) or register as organizer.
-          </div>
-        )}
+        {/* Demo hint removed per user request */}
 
         <button
           className="btn btn-primary btn-lg"
