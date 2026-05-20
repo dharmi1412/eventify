@@ -3453,7 +3453,7 @@ function UserDashboard({ setPage, setModal }) {
                           </button>
                           {b.status === "Confirmed" && (
                             <button className="btn btn-ghost btn-sm">
-                              🔗 Share
+                              {/* 🔗 Share */}
                             </button>
                           )}
                           {b.status !== "Cancelled" && (
@@ -3693,6 +3693,25 @@ function ProfileTab({ user }) {
     setUploading(true);
     toast.add("Uploading to Cloudinary...", "", "info");
     const res = await uploadToCloudinary(file);
+    // Prevent saving browser-local blob: URLs to the server — these won't persist after reload/deploy
+    if (!res || !res.url) {
+      setUploading(false);
+      toast.add(
+        "Upload failed",
+        "No URL returned from upload provider",
+        "error",
+      );
+      return;
+    }
+    if (String(res.url).startsWith("blob:")) {
+      setUploading(false);
+      toast.add(
+        "Upload failed",
+        "Cloudinary (or external upload) is not configured — image won't persist after reload.",
+        "error",
+      );
+      return;
+    }
     setImg(res.url);
     setUploading(false);
     try {
@@ -4285,6 +4304,24 @@ function OrganizerDashboard({ setPage }) {
     setUploading(true);
     toast.add("Uploading banner...", "Sending to Cloudinary", "info");
     const res = await uploadToCloudinary(file);
+    if (!res || !res.url) {
+      setUploading(false);
+      toast.add(
+        "Upload failed",
+        "No URL returned from upload provider",
+        "error",
+      );
+      return;
+    }
+    if (String(res.url).startsWith("blob:")) {
+      setUploading(false);
+      toast.add(
+        "Upload failed",
+        "Cloudinary (or external upload) is not configured — banner won't persist after reload.",
+        "error",
+      );
+      return;
+    }
     setBannerUrl(res.url);
     setUploading(false);
     toast.add("Banner uploaded!", "", "success");
