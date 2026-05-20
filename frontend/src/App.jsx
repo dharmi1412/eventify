@@ -1503,16 +1503,32 @@ function loadRazorpay(amount, name, onSuccess) {
   );
 }
 
-// Cloudinary upload stub (development only)
-// Returns a persistent placeholder URL instead of a blob URL so images survive reloads.
+// Upload helper that sends image files to the backend upload endpoint.
+// The backend uses Cloudinary to return a stable remote URL for persistence.
 async function uploadToCloudinary(file) {
-  // In production: POST to https://api.cloudinary.com/v1_1/{cloud}/image/upload
-  return new Promise((resolve) => {
-    const id = "evt_" + Date.now();
-    // Use placehold.co so the returned URL is reachable after page reloads.
-    const url = `https://placehold.co/800x400?text=${encodeURIComponent(id)}`;
-    setTimeout(() => resolve({ url, public_id: id }), 800);
+  const endpoint = `${getApiBase()}/uploads`;
+  const data = new FormData();
+  data.append("file", file);
+
+  const headers = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    body: data,
+    headers,
   });
+
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(json.message || `Upload failed (${response.status})`);
+  }
+
+  return {
+    url: json.data?.url,
+    public_id: json.data?.public_id,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3692,34 +3708,43 @@ function ProfileTab({ user }) {
     if (!file) return;
     setUploading(true);
     toast.add("Uploading to Cloudinary...", "", "info");
-    const res = await uploadToCloudinary(file);
-    // Prevent saving browser-local blob: URLs to the server — these won't persist after reload/deploy
-    if (!res || !res.url) {
-      setUploading(false);
-      toast.add(
-        "Upload failed",
-        "No URL returned from upload provider",
-        "error",
-      );
-      return;
-    }
-    if (String(res.url).startsWith("blob:")) {
-      setUploading(false);
-      toast.add(
-        "Upload failed",
-        "Cloudinary (or external upload) is not configured — image won't persist after reload.",
-        "error",
-      );
-      return;
-    }
-    setImg(res.url);
-    setUploading(false);
     try {
-      await api("/users/me", { method: "PATCH", body: { avatarUrl: res.url } });
-      await refreshUser();
-      toast.add("Photo uploaded!", "Profile picture updated", "success");
+      const res = await uploadToCloudinary(file);
+      if (!res || !res.url) {
+        toast.add(
+          "Upload failed",
+          "No URL returned from upload provider",
+          "error",
+        );
+        return;
+      }
+      if (String(res.url).startsWith("blob:")) {
+        toast.add(
+          "Upload failed",
+          "Cloudinary (or external upload) is not configured — image won't persist after reload.",
+          "error",
+        );
+        return;
+      }
+      setImg(res.url);
+      try {
+        await api("/users/me", {
+          method: "PATCH",
+          body: { avatarUrl: res.url },
+        });
+        await refreshUser();
+        toast.add("Photo uploaded!", "Profile picture updated", "success");
+      } catch (err) {
+        toast.add("Could not save avatar", err.message || "", "error");
+      }
     } catch (err) {
-      toast.add("Could not save avatar", err.message || "", "error");
+      toast.add(
+        "Upload failed",
+        err.message || "Unable to upload image",
+        "error",
+      );
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -4303,28 +4328,35 @@ function OrganizerDashboard({ setPage }) {
     if (!file) return;
     setUploading(true);
     toast.add("Uploading banner...", "Sending to Cloudinary", "info");
-    const res = await uploadToCloudinary(file);
-    if (!res || !res.url) {
-      setUploading(false);
+    try {
+      const res = await uploadToCloudinary(file);
+      if (!res || !res.url) {
+        toast.add(
+          "Upload failed",
+          "No URL returned from upload provider",
+          "error",
+        );
+        return;
+      }
+      if (String(res.url).startsWith("blob:")) {
+        toast.add(
+          "Upload failed",
+          "Cloudinary (or external upload) is not configured — banner won't persist after reload.",
+          "error",
+        );
+        return;
+      }
+      setBannerUrl(res.url);
+      toast.add("Banner uploaded!", "", "success");
+    } catch (err) {
       toast.add(
         "Upload failed",
-        "No URL returned from upload provider",
+        err.message || "Unable to upload banner",
         "error",
       );
-      return;
-    }
-    if (String(res.url).startsWith("blob:")) {
+    } finally {
       setUploading(false);
-      toast.add(
-        "Upload failed",
-        "Cloudinary (or external upload) is not configured — banner won't persist after reload.",
-        "error",
-      );
-      return;
     }
-    setBannerUrl(res.url);
-    setUploading(false);
-    toast.add("Banner uploaded!", "", "success");
   };
 
   const navItems = [

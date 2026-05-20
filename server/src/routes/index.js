@@ -6,6 +6,7 @@ import bookingRoutes from "./bookingRoutes.js";
 import contactRoutes from "./contactRoutes.js";
 import adminRoutes from "./adminRoutes.js";
 import wishlistRoutes from "./wishlistRoutes.js";
+import uploadRoutes from "./uploadRoutes.js";
 
 const router = Router();
 
@@ -16,6 +17,7 @@ router.use("/bookings", bookingRoutes);
 router.use("/contact", contactRoutes);
 router.use("/admin", adminRoutes);
 router.use("/wishlist", wishlistRoutes);
+router.use("/uploads", uploadRoutes);
 
 router.get("/health", (req, res) => {
   res.json({ success: true, message: "Eventify API is running" });
